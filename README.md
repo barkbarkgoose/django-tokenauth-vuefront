@@ -18,6 +18,11 @@
 
 my notes are pretty much the condensed version of the article.
 
+DRF tokens may not be enough security on its own for some use cases.  I'd suggest looking into the following:
+
+- https://james1345.github.io/django-rest-knox/
+- https://django-rest-framework-simplejwt.readthedocs.io/en/latest/
+
 ## create django project
 
 	mkdir myapi
