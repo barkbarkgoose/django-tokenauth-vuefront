@@ -69,7 +69,7 @@ class HelloView(APIView):
 	
 ## settings.py
 
-**NOTE**: _I didn't find anything in the docs saying that _
+**NOTE**: _I didn't find anything in the docs saying that `DEFAULT_PERMISSION_CLASSES` needed to be specified in the rest_framework settings.  After testing I found that this needs to be there in order for authentication to be required_
 
 ```python
 # ...
