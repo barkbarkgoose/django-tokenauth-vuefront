@@ -25,10 +25,10 @@ DRF tokens may not be enough security on its own for some use cases.  I'd sugges
 
 ## create django project
 
-	mkdir myapi
-	cd myapi
-	django-admin startproject myapi .
-	cd myapi
+	mkdir main
+	cd main
+	django-admin startproject main .
+	cd main
 	django-admin startapp core
 
 ## dependencies
@@ -42,7 +42,7 @@ I got an error with the project being set up the way it is in reference to the i
 
 ```python
 # ...
-name = 'myapi.core'
+name = 'main.core'
 # ...
 ```
 
@@ -51,7 +51,7 @@ name = 'myapi.core'
 ```python
 from django.urls import path
 from rest_framework.authtoken.views import obtain_auth_token 
-from myapi.core import views
+from main.core import views
 
 urlpatterns = [
     path('hello/', views.HelloView.as_view(), name='hello'),
@@ -83,7 +83,7 @@ INSTALLED_APPS = [
 	# ...
 	'rest_framework',
 	'rest_framework.authtoken',
-	'<appname>',  # for tutorial it's 'myapi.core',
+	'<appname>',  # for tutorial it's 'main.core',
 ]
 
 REST_FRAMEWORK = {
@@ -95,9 +95,22 @@ REST_FRAMEWORK = {
     ],
 }
 
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+				# --- for tests.py to work this needs to be set ---
+        'TEST': {
+            'MIRROR': 'default',  # Added this setting
+        }
+    }
+}
+
 # ...
 
 ```
+
+_note that I've added `'TEST'` under `DATABASES`, this is needed to fully test routing endpoints from tests.py_ 
 
 ## create a user
 
@@ -136,3 +149,14 @@ http post http://127.0.0.1:8000/api-token-auth/ username=<name> password=<pass>
 ```
 
 if a token has already been created for the user this will return that one.
+
+# testing
+
+to test the api endpoints django tests will need to access the same database that is normally used.
+
+<!-- when testing from the BASE_DIR type the following:
+
+	python manage.py test api --settings=api.testconfig -->
+
+I've gone back and forth between forcing usage of a settings file just for tests.  Right now I think I prefer just putting a BASE_URL variable in the main settings file and referencing that.
+
