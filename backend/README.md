@@ -139,7 +139,7 @@ finally as a python request:
 	import requests
 	
 	url = 'http://localhost:8000/hello/'
-	headers = {'Authorization': 'Token a1c8c64fa2907c5ad43c37dfea7506ce08d8cf82'}
+	headers = {'Authorization': 'Token 5475212b125e8d056e4c12ec050854d737f8718f'}
 	r = requests.get(url, headers=headers)
 
 ### users can request a token via an api call if they give the correct password and username

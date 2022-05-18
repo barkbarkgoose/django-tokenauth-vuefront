@@ -1,9 +1,9 @@
 # --- django imports ---
 from re import S
 from django.contrib.auth.models import User
+from django.http import QueryDict
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from api.serializer import CreateUserSerializer
 
 # --- 3rd party imports ---
 from rest_framework import status
@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 # --- project imports ---
-from api.serializer import CreateUserSerializer
+# from api.serializer import CreateUserSerializer
 from api.serializer import AdminGetUserSerializer
 from api.serializer import GetUserSerializer
 
@@ -31,40 +31,109 @@ fields for request.user
 
 """
 # NOTE: user login handled by 
+class AdminDeleteUser(APIView):
+    """
+    USER DELETION - ADMIN
+        - admin privileges required to fully delete user
+        - username and password are required along with token
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request):
+        print(f"request.POST: {request.POST}")
+        print(f"request.data: {request.data}")
+        return Response({"status": "OK"}, status=status.HTTP_202_ACCEPTED)
+
+# ==============================================================================
+class UserDeleteAccount(APIView):
+    """
+    USER DELETION - NORMAL USER
+        - regular users can shallow-delete their own account. which sets
+          user.is_active to False
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        pdb.set_trace()
+        print(request.POST)
 
 
-# --- basic hello api response ---
-class HelloView(APIView):
+# ==============================================================================
+class Hello(APIView):
+    """
+    simple Hello view to test user authentication
+    """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         content = {'message': f'Hello, {request.user}!'}
-        return Response(content)
+        return Response(content, status=status.HTTP_200_OK)
 
+# ==============================================================================
+# LoginView --> rest_framework.authtoken.views.obtain_auth_token.
+#       - returns token if username and pass check out (creates if not already made)
 
-class SignupView(APIView):
+# ==============================================================================
+class Signup(APIView):
     """
-    @return:
+    create new User
+    Error cases:
+        - username taken and user is active
+        - username taken but user not active
+            - in this case no data is overwritten and the account is reactivated
+    
+    @RETURN_STATUS:
         201 - SUCCESS
         400 - ERROR
+        409 - CONFLICT (username taken)
     """
     http_method_names = ["put"]
     permission_classes = [AllowAny]
-    serializer_class = CreateUserSerializer
+    # serializer_class = CreateUserSerializer
 
     def put(self, request):
-        serialized = CreateUserSerializer(data=request.data)
-        if serialized.is_valid():
-            pw = serialized.validated_data.pop('password')
-            user = serialized.create(serialized.validated_data, pw)
-            return Response(serialized.validated_data, status=status.HTTP_201_CREATED)
+        # --- make sure data has at least username and password ---
+        if False in ('username', 'password' in request.data):
+            request_data = request.POST.dict()
         else:
-            return Response(serialized._errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        
+            request_data = request.data
+    
+        try:
+            user, created = User.objects.get_or_create(username=request_data['username'])
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        # --- check possible conflict if user not created (username taken) ---
+        conflict = not created
+        if not created:
+            if not user.is_active:
+                user.is_active = True
+                conflict = False
+        else:
+            # --- password only set if new user, not reinstating old one ---
+            user.set_password = request_data['password']
+        
+        if conflict: 
+            return Response(
+                {"username": "username already taken"}, 
+                status=status.HTTP_409_CONFLICT
+            )
+        else:
+            user.save()
+            return Response(
+                {'id': user.id, 'username': user.username},
+                status=status.HTTP_201_CREATED
+            )
+                
+                
+# ==============================================================================
 class UserInfo(APIView):
+    """
+    get info for single user
+    """
     http_method_names = ['get']
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -73,9 +142,15 @@ class UserInfo(APIView):
         serializer = GetUserSerializer(request.user)
         return Response(serializer.data)
 
-
-# --- return list of all users if request comes from admin ---
+# ==============================================================================
 class UserList(ListCreateAPIView):
+    """
+    return list of all users if request comes from admin
+    """
     queryset = User.objects.all()
     permission_classes = [IsAdminUser]
     serializer_class = AdminGetUserSerializer
+
+# ==============================================================================
+class UserUpdate(APIView):
+    pass

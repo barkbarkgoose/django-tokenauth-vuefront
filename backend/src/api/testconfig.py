@@ -26,9 +26,9 @@ TEST_BASE_URL = 'http://localhost:8000/'
 # --- code to put in start of tests if want to enforce this file usage ---
 def check_settings(self, settings):
     db = settings.DATABASES['default']
-        if (
-            'TEST' not in db or 
-            'MIRROR' not in db['TEST'] or
-            db['TEST']['MIRROR'] != 'default'
-            ):
-            self.fail("run again with `--settings=api.testconfig` option")
+    if (
+        'TEST' not in db or 
+        'MIRROR' not in db['TEST'] or
+        db['TEST']['MIRROR'] != 'default'
+        ):
+        self.fail("run again with `--settings=api.testconfig` option")
