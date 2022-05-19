@@ -7,47 +7,43 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework.authtoken.models import Token
 
-from api.request_methods import _delete_request
-from api.request_methods import _get_request
-from api.request_methods import _post_request
-from api.request_methods import _put_request
+from api.request_methods import MakeRequest
 
 import pdb
-import requests
 import sys
-# import requests
 
-test_client = Client()
-
+# ==============================================================================
 """
 DRF response codes: https://www.django-rest-framework.org/api-guide/status-codes/#status-codes
-
 """
+test_client = Client()
 _testData = {
     'test_user': {
+        'id': '',
         'username': 'testuser',
         'password': 'grumpymcgrumpface88',
         'token': '',
     },
     'admin_user': {
-        'username': '',
-        'password': '',
+        'id': '',
+        'username': 'admin',
+        'password': 'adminpass',
         'token': '',
     }
 }
 
-class Test00(TestCase):
-    def test_00_add_testuser(self):
+# =========================== SETUP (add testuserr) ============================
+class Test00_TestUser_Create(TestCase):
+    def test_00_testuser_add_testuser_pass(self):
         """
         try to make call to create, or fetch, test user. Exit if fails
         """
         uri = 'signup'
-        headers = {
+        data = {
             'username': _testData['test_user']['username'], 
             'password': _testData['test_user']['password']
         }
-        response = _put_request(uri, headers)
-
+        response = MakeRequest.put(uri, json=data)
         # --- make sure account was either created or duplicate found ---
         if response.status_code == status.HTTP_201_CREATED:
             self.assertEqual(
@@ -60,81 +56,196 @@ class Test00(TestCase):
                 status.HTTP_409_CONFLICT
             )
 
-class Test01(TestCase):
-    def test_00_login(self):
+# =============================== TESTUSER TESTS ===============================
+class Test01_TestUser_Login_Info(TestCase):
+    def test_00_testuser_login_pass(self):
         """
         test user login to get token for authentication
         """
         uri = 'login'
-        headers = {
+        data = {
             'username': _testData['test_user']['username'], 
             'password': _testData['test_user']['password']
         }
-        response = _post_request(uri, headers)
+        response = MakeRequest.post(uri, json=data)
         if response.status_code == status.HTTP_200_OK:
-            user, _ = User.objects.get_or_create(username=headers['username'])
+            user, _ = User.objects.get_or_create(username=data['username'])
             token, created = Token.objects.get_or_create(
                 user=user,
                 key=response.json()['token']
             )
             if created: token.save()
             _testData['test_user']['token'] = str(token)
+
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK
         )
 
-class Test02(TestCase):
-    def test_00_hello_fail(self):
+    def test_01_testuser_get_userinfo_pass(self):
+        """
+        get testuser info
+        """
+        uri = 'info'
+        headers = {'Authorization': f"Token {_testData['test_user']['token']}"}
+        response = MakeRequest.get(uri, headers=headers)
+        if response.status_code == status.HTTP_200_OK:
+            rdata = response.json()
+            _testData['test_user']['id'] = rdata['id']
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+# =============================== HELLO TEST ===================================
+class Test02_TestUser_Hello(TestCase):
+    def test_00_testuser_hello_fail(self):
         uri = 'hello'
-        response = _get_request(uri)
+        response = MakeRequest.get(uri)
         self.assertEqual(
             response.status_code, 
             status.HTTP_401_UNAUTHORIZED
         )
 
-    def test_01_hello_success(self):
+    def test_01_testuser_hello_success(self):
         token = _testData['test_user']['token']
-        headers={
-            'Authorization': f"Token {token}"
-        }
+        headers={'Authorization': f"Token {token}"}
         uri = 'hello'
-        response = _get_request(uri, headers)
+        response = MakeRequest.get(uri, headers=headers)
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK
         )
 
-
-class Test03(TestCase):
-    def test_00_delete_user_admin_fail(self):
-        
-        token = _testData['test_user']['token']
-        headers={
-            'username': _testData['test_user']['username'],
-            'password': _testData['test_user']['password'],
-            'Authorization': f"Token {token}",
+class Test03_TestUser_Update_Delete_Signup(TestCase):
+    def test_00_testuser_update_pass(self):
+        """
+        send request to update user
+        """
+        uri = 'update'
+        headers = {'Authorization': f"Token {_testData['test_user']['token']}"}
+        data = {
+            'first_name': 'newfirstname',
+            'last_name': 'newlastname',
+            'email': 'newemail@test.tst',
+            'is_active': False,
         }
-        uri = 'admin-delete-user'
-        response = _delete_request(uri, headers)
+        response = MakeRequest.post(uri, headers=headers, json=data)
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN
+            status.HTTP_202_ACCEPTED
         )
 
-    def test_01_get_admin_user(self):
+    def test_00_testuser_update_fail(self):
+        """
+        send request to update, don't send authtoken
+        """
+        uri = 'update'
+        headers = {}
+        data = {
+            'first_name': 'anothernewfirstname',
+            'last_name': 'anothernewlastname',
+            'email': 'anothernewemail@test.tst',
+            'yo_mama': 'unsavory joke',
+        }
+        response = MakeRequest.post(uri, headers=headers, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED
+        )
+
+    def test_02_testuser_delete_fail(self):
+        """
+        testuser try to delete self, don't send authtoken
+        """
+        uri = 'delete'
+        headers = {}
+        response = MakeRequest.delete(uri, headers=headers)
+        self.assertEqual(
+            response.status_code, 
+            status.HTTP_401_UNAUTHORIZED
+        )
+
+    def test_03_testuser_delete_pass(self):
+        """
+        testuser try to delete self, don't send authtoken
+        """
+        uri = 'delete'
+        headers = {"Authorization": f"Token {_testData['test_user']['token']}"}
+        response = MakeRequest.delete(uri, headers=headers)
+        self.assertEqual(
+            response.status_code, 
+            status.HTTP_202_ACCEPTED
+        )
+
+    def test_04_testuser_hello_fail(self):
+        """
+        user is inactive, so this request should now fail
+        """
+        uri = 'hello'
+        headers = {"Authorization": f"Token {_testData['test_user']['token']}"}
+        response = MakeRequest.get(uri, headers=headers)
+        self.assertEqual(
+            response.status_code, 
+            status.HTTP_401_UNAUTHORIZED
+        )
+
+    def test_05_testuser_reactivate_pass(self):
+        """
+        use signup endpoint to reactivate test_user
+        """
+        uri = 'signup'
+        data = {
+            "username": _testData['test_user']['username'],
+            "password": _testData['test_user']['password'],
+        }
+        response = MakeRequest.put(uri, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+    def test_06_testuser_newsignup_fail(self):
+        """
+        try to sign up enduser again, should fail with 409 status
+        """
+        uri = 'signup'
+        data = {
+            "username": _testData['test_user']['username'],
+            "password": _testData['test_user']['password'],
+        }
+        response = MakeRequest.put(uri, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT
+        )
+
+# ==============================================================================
+# ==================== ADMIN TESTS (these should come last) ====================
+# ==============================================================================
+class Test04_Admin_Login_DeleteTestUser(TestCase):
+    """
+    test endpoints requiring admin privelages
+    """
+    def test_01_admin_login_pass(self):
         """
         add admin user to _testData
         """
-        username = input("\nEnter admin username: ")
-        password = input("Enter admin password: ")
-        _testData['admin_user']['username'] = username
-        _testData['admin_user']['password'] = password
+        if _testData['admin_user']['username'] == '':
+            username = input("\nEnter admin username: ")
+            _testData['admin_user']['username'] = username
 
+        if _testData['admin_user']['password'] == '':
+            password = input("Enter admin password: ")
+            _testData['admin_user']['password'] = password
         # --- try to get token with user credentials ---
-        response = _post_request(
+        response = MakeRequest.post(
             'login',
-            {'username': username, 'password': password}
+            json={
+                'username': _testData['admin_user']['username'], 
+                'password': _testData['admin_user']['password']
+            }
         )
         if response.status_code == status.HTTP_200_OK:
             _testData['admin_user']['token'] = response.json()['token']
@@ -142,38 +253,139 @@ class Test03(TestCase):
         else:
             self.fail("\ntoken or admin user not found\n")
 
-    def test_02_delete_user_admin_pass(self):
+    def test_02_admin_get_userlist_pass(self):
         """
-        
+        get testuser info
+        """
+        uri = 'admin-userlist'
+        headers = {'Authorization': f"Token {_testData['admin_user']['token']}"}
+        response = MakeRequest.get(uri, headers=headers)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+    def test_03_admin_search_testuser_pass(self):
+        """
+        successfully search for test_user by username
+        """
+        uri = 'admin-searchuser'
+        headers = {'Authorization': f"Token {_testData['admin_user']['token']}"}
+        response = MakeRequest.get(
+            uri, 
+            headers=headers,
+            json={"username": _testData['test_user']['username']}
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+    def test_04_admin_search_testuser_fail(self):
+        """
+        search for user, but give username that won't work
+        """
+        uri = 'admin-searchuser'
+        headers = {'Authorization': f"Token {_testData['admin_user']['token']}"}
+        response = MakeRequest.get(
+            uri, 
+            headers=headers,
+            json={"username": "badusername"}
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+    
+    def test_05_admin_search_testuser_fail(self):
+        """
+        search for user, but don't give any arguments in json
+        """
+        uri = 'admin-searchuser'
+        headers = {'Authorization': f"Token {_testData['admin_user']['token']}"}
+        response = MakeRequest.get(
+            uri, 
+            headers=headers,
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+
+    def test_06_admin_search_testuser_fail(self):
+        """
+        FAIL: search for user, but as test_user
+        """
+        uri = 'admin-searchuser'
+        headers = {'Authorization': f"Token {_testData['test_user']['token']}"}
+        response = MakeRequest.get(
+            uri, 
+            headers=headers,
+            json={"username": _testData['test_user']['username']}
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN
+        )
+
+    def test_07_admin_delete_testuser_fail(self):
+        """
+        FAIL: try to delete user as admin, but with test_user token
+        """
+        token = _testData['test_user']['token']
+        data = {
+            'id': _testData['test_user']['id']
+        }
+        headers={'Authorization': f"Token {token}"}
+        uri = 'admin-deleteuser'
+        response = MakeRequest.delete(uri, headers=headers, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN
+        )
+
+    def test_08_admin_delete_testuser_fail(self):
+        """
+        FAIL: try to delete user as admin, but no data privided
         """
         token = _testData['admin_user']['token']
-        headers={
-            'username': _testData['admin_user']['username'],
-            'password': _testData['admin_user']['password'],
-            'Authorization': f"Token {token}",
+        data = {}
+        headers={'Authorization': f"Token {token}"}
+        uri = 'admin-deleteuser'
+        response = MakeRequest.delete(uri, headers=headers, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+
+    def test_09_admin_delete_testuser_fail(self):
+        """
+        FAIL: try to delete user as admin, bad id provided
+        """
+        token = _testData['admin_user']['token']
+        data = {
+            'id': 'badid'
         }
-        uri = 'admin-delete-user'
-        response = _delete_request(uri, headers)
+        headers={'Authorization': f"Token {token}"}
+        uri = 'admin-deleteuser'
+        response = MakeRequest.delete(uri, headers=headers, json=data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+
+    def test_10_admin_delete_testuser_pass(self):
+        """
+        SUCCESS: successfully delete user as admin
+        """
+        token = _testData['admin_user']['token']
+        data = {
+            'id': _testData['test_user']['id']
+        }
+        headers = {'Authorization': f"Token {token}"}
+        uri = 'admin-deleteuser'
+        response = MakeRequest.delete(uri, headers=headers, json=data)
         self.assertEqual(
             response.status_code,
             status.HTTP_202_ACCEPTED
         )
-
-
-    # def test_jake(self):
-    #     jake = User.objects.get(username='jake')
-    #     headers={"Authorization": f"Token {str(jake.auth_token)}"}
-    #     uri = '/hello/'
-    #     response = self._get_request(uri, headers)
-    #     self.assertEqual(
-    #         response.status_code,
-    #         status.HTTP_200_OK
-    #     )
-
-
-    # def test_method_fail(self):
-    #     response = test_client.post('/hello/')
-    #     self.assertEqual(
-    #         response.status_code, 
-    #         status.HTTP_301_MOVED_PERMANENTLY
-    #     )

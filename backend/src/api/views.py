@@ -1,5 +1,6 @@
 # --- django imports ---
 from re import S
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from django.http import QueryDict
 from django.shortcuts import render, redirect
@@ -23,42 +24,136 @@ from api.serializer import GetUserSerializer
 import pdb
 
 """
-fields for request.user
+__RESPONSE_CODES__
+    SUCCESS - (methods that I return explicitly)
+        DELETE: 202
+        GET: 200
+        POST: 201, 202
+        PUT: 201, 202
 
-'_get_pk_val', '_get_unique_checks', '_legacy_get_session_auth_hash', '_meta', '_password', '_perform_date_checks', '_perform_unique_checks', '_prepare_related_fields_for_save', '_save_parents', '_save_table', '_set_pk_val', '_state', 
-
-'auth_token', 'check', 'check_password', 'clean', 'clean_fields', 'date_error_message', 'date_joined', 'delete', 'email', 'email_user', 'first_name', 'from_db', 'full_clean', 'get_all_permissions', 'get_deferred_fields', 'get_email_field_name', 'get_full_name', 'get_group_permissions', 'get_next_by_date_joined', 'get_previous_by_date_joined', 'get_session_auth_hash', 'get_short_name', 'get_user_permissions', 'get_username', 'groups', 'has_module_perms', 'has_perm', 'has_perms', 'has_usable_password', 'id', 'is_active', 'is_anonymous', 'is_authenticated', 'is_staff', 'is_superuser', 'last_login', 'last_name', 'logentry_set', 'natural_key', 'normalize_username', 'objects', 'password', 'pk', 'prepare_database_save', 'refresh_from_db', 'save', 'save_base', 'serializable_value', 'set_password', 'set_unusable_password', 'unique_error_message', 'user_permissions', 'username', 'username_validator', 'userprofile', 'validate_unique'
-
+    ERROR
+        ... a bit of everything ...
+        400: bad request
+        401: unauthorized - typically if a user is inactive and trying to log in
+        403: forbidden - user doesn't have permissions to access endpoint
+        404: not found
+        409: conflict - example would be trying to create user that is already created
+        500: internal server error
 """
-# NOTE: user login handled by 
+# ==============================================================================
 class AdminDeleteUser(APIView):
     """
     USER DELETION - ADMIN
-        - admin privileges required to fully delete user
-        - username and password are required along with token
+        - admin privileges and valid user id required to fully delete
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
 
     def delete(self, request):
-        print(f"request.POST: {request.POST}")
-        print(f"request.data: {request.data}")
-        return Response({"status": "OK"}, status=status.HTTP_202_ACCEPTED)
+        """
+        - check for id in request.data
+        - check for user match
+        """
+        error = False
+        # --- default repsonse status ---
+        if 'id' in request.data:
+            userid = request.data['id']
+            try:
+                user = User.objects.get(id=userid)
+            except:
+                error = True
+        else:
+            userid = "None"
+            error = True
+
+        # --- now actually try to delete user ---
+        if not error:
+            try:
+                user.delete()
+            except:
+                error = True
+        
+        if error:
+            return Response(
+                {'message': f'user with id "{userid}" not found'},
+                status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({"message": "OK"}, status=status.HTTP_202_ACCEPTED)
 
 # ==============================================================================
-class UserDeleteAccount(APIView):
+class AdminSearchUser(APIView):
+    """
+    search for User as Admin
+        - if authenticated will return 200 response whether user is found or not
+        - if user found 
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        # --- make sure id or username are in request.data ---
+        user = None
+        if 'id' in request.data:
+            user = User.objects.filter(id=request.data['id']).first()
+        elif 'username' in request.data:
+            user = User.objects.filter(username=request.data['username']).first()
+        
+        if not user:
+            if 'id' in request.data or 'username' in request.data:
+                message = "user not found"
+            else:
+                message = "user id or username required for lookup"
+
+            return Response(
+                {'message': message}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = GetUserSerializer(user)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminUserUpdate(APIView):
+    """
+    same as regular UserUpdate view, but all user fields are accessible
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+    allowed_fields = ['first_name', 'last_name', 'email']
+
+    def post(self, request):
+        user = request.user
+        data = request.data
+        keys = data.keys()
+        print("\nkey-val pairs in request:")
+        for key in keys:
+            print(f"\t{key}: {data[key]} --> ")
+
+# ==============================================================================
+class DeleteUser(APIView):
     """
     USER DELETION - NORMAL USER
-        - regular users can shallow-delete their own account. which sets
+        - requires token authentication, user will be part of request
+        - allows users shallow-delete their own account. Which sets
           user.is_active to False
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        pdb.set_trace()
-        print(request.POST)
-
+        try:
+            request.user.is_active = False
+            request.user.save()
+            return Response(
+                {"message": f"user: {request.user} set as inactive"}, 
+                status=status.HTTP_202_ACCEPTED
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # ==============================================================================
 class Hello(APIView):
@@ -86,71 +181,104 @@ class Signup(APIView):
             - in this case no data is overwritten and the account is reactivated
     
     @RETURN_STATUS:
-        201 - SUCCESS
+        200 - SUCCESS (reactivated)
+        201 - SUCCESS (created)
         400 - ERROR
         409 - CONFLICT (username taken)
     """
-    http_method_names = ["put"]
     permission_classes = [AllowAny]
     # serializer_class = CreateUserSerializer
 
     def put(self, request):
-        # --- make sure data has at least username and password ---
+        # --- make sure data has username and password ---
         if False in ('username', 'password' in request.data):
-            request_data = request.POST.dict()
-        else:
-            request_data = request.data
-    
-        try:
-            user, created = User.objects.get_or_create(username=request_data['username'])
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                _ = request.data['username']
+                _ = request.data['password']
+            except Exception as e:
+                return Response(
+                    {'error': f'{str(e)} missing'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        user, created = User.objects.get_or_create(username=request.data['username'])
 
         # --- check possible conflict if user not created (username taken) ---
         conflict = not created
+        rstatus = None
+        message = None
         if not created:
             if not user.is_active:
-                user.is_active = True
-                conflict = False
+                passmatch = check_password(request.data['password'], user.password)
+                if passmatch:
+                    user.is_active = True
+                    user.save()
+                    conflict = False
+                    rstatus = status.HTTP_200_OK
+                    message = {"message": "previous user found and reactivated"}
         else:
             # --- password only set if new user, not reinstating old one ---
-            user.set_password = request_data['password']
+            user.set_password(request.data['password'])
+            user.save()
+            rstatus = status.HTTP_201_CREATED
+            message = {"id": user.id, "message": f"user \"{user.username}\" created"}
         
         if conflict: 
             return Response(
-                {"username": "username already taken"}, 
+                {"message": "username already taken"}, 
                 status=status.HTTP_409_CONFLICT
             )
         else:
-            user.save()
-            return Response(
-                {'id': user.id, 'username': user.username},
-                status=status.HTTP_201_CREATED
-            )
-                
-                
+            return Response(message, status=rstatus)
+                  
 # ==============================================================================
 class UserInfo(APIView):
     """
     get info for single user
     """
-    http_method_names = ['get']
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = GetUserSerializer(request.user)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 # ==============================================================================
 class UserList(ListCreateAPIView):
     """
     return list of all users if request comes from admin
     """
-    queryset = User.objects.all()
+    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
+    queryset = User.objects.all()
     serializer_class = AdminGetUserSerializer
 
 # ==============================================================================
 class UserUpdate(APIView):
-    pass
+    """
+    Update user based on key/val pairs in request.data.  ignores unallowed_fields
+    will always return 202 response if user is authenticated, even if nothing is changed
+    response data will include user info.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    allowed_fields = ['first_name', 'last_name', 'email']
+
+    def post(self, request):
+        user = request.user
+        data = request.data
+        keys = data.keys()
+        updated = False
+        for key in keys:
+            if key in self.allowed_fields: 
+                setattr(user, key, data[key])
+                updated = True
+        
+        if updated:
+            user.save()
+
+        serializer = GetUserSerializer(user)
+        
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+# ==============================================================================
