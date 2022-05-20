@@ -6,6 +6,12 @@ My intention is to make different pages in the frontend to test out and document
 
 # TODO
 
+## backend
+
+- [ ]  data sanitization.  Make all the views use a serializer to confirm format is correct.
+
+## frontend
+
 - [ ]  front end requests a form from django
 - [ ]  form submission and checking in django
 - [ ]  timeout for token, force front-end to request update
@@ -32,7 +38,9 @@ My intention is to make different pages in the frontend to test out and document
   - [x]  email
   - [x]  username
 - [ ]  admin user updates
-  - [ ]  will need to check if attribute exists before trying to set it
+  - [ ]  will need to check if attribute is valid before trying to set it
   - [ ]  use serializer
-- [ ]  test using token to authenticate without any user
-- [ ]  check if "is_staff" gives admin priveleges
+- [x]  test using token to authenticate without any user
+  -  ...token has to have associated user to work with DRF.
+- [x]  check if "is_staff" gives admin priveleges
+  -  ...it does, checked manually

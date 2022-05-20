@@ -17,8 +17,8 @@ from rest_framework.views import APIView
 
 # --- project imports ---
 # from api.serializer import CreateUserSerializer
-from api.serializer import AdminGetUserSerializer
-from api.serializer import GetUserSerializer
+from user_api.serializer import AdminGetUserSerializer
+from user_api.serializer import GetUserSerializer
 
 # --- generic python library imports ---
 import pdb

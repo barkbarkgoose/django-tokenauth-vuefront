@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # project stuff
 **settings.py
 **/migrations/
@@ -132,7 +131,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-=======
 # Logs
 logs
 *.log
@@ -237,4 +235,3 @@ dist
 
 # TernJS port file
 .tern-port
->>>>>>> 05f8b749d6a3323df43e5af67124b2a082435425

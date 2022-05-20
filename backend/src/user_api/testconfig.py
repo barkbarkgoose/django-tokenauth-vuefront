@@ -21,8 +21,6 @@ DATABASES = {
     }
 }
 
-TEST_BASE_URL = 'http://localhost:8000/'
-
 # # --- code to put in start of tests if want to enforce this file usage ---
 # def check_settings(self, settings):
 #     db = settings.DATABASES['default']

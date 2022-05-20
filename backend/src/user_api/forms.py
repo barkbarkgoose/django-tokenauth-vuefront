@@ -1,6 +1,6 @@
 from django import forms
 
-from api.models import Appointment
+from user_api.models import Appointment
 
 class AppointmentForm(forms.ModelForm):
     class Meta:
